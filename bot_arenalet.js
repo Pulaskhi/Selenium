@@ -1,16 +1,13 @@
-// bot_arenalet.js
+require("dotenv").config();
 const { Builder, By, until } = require("selenium-webdriver");
 const chrome = require("selenium-webdriver/chrome");
 
-async function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
-}
+async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-const URL = "https://www.caib.es/albergsfront";
-
-const PERSONAS = 5;
-const NOCHES = 1;
-const REFUGIO = "Casa dels Oguers";
+const URL = process.env.URL;
+const REFUGIO = process.env.REFUGIO;
+const PERSONAS = Number(process.env.PERSONAS);
+const NOCHES = Number(process.env.NOCHES)
 
 // Tus datos
 const USER = {
