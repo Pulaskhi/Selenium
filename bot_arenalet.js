@@ -10,8 +10,9 @@ const URL = "https://www.caib.es/albergsfront";
 
 const PERSONAS = 5;
 const NOCHES = 1;
-const REFUGIO = "Lavanor";
+const REFUGIO = "Casa dels Oguers";
 
+// Tus datos
 const USER = {
   nombre: "Marcos",
   primerApellido: "González",
@@ -41,7 +42,7 @@ async function selectContains(driver, selectId, text) {
       if (!el) return;
       value = String(value).toLowerCase();
       const opt = [...el.options].find(o =>
-        o.textContent.toLowerCase().includes(value)
+        (o.textContent || "").toLowerCase().includes(value)
       );
       if (opt) {
         el.value = opt.value;
@@ -71,7 +72,7 @@ async function selectValue(driver, selectId, value) {
 async function selectBeds(driver, personas) {
   console.log("[INFO] Seleccionando plazas…");
 
-  // Primero habitaciones (lo más común en Arenalet)
+  // 1) Habitaciones
   let hab = await driver.findElements(
     By.css("#plazasHabitaciones input[type='checkbox'], #plazasHabitaciones input[type='radio']")
   );
@@ -81,20 +82,20 @@ async function selectBeds(driver, personas) {
     return;
   }
 
-  // Luego camas sueltas
+  // 2) Camas
   let camas = await driver.findElements(
     By.css("#plazasCamas input[type='checkbox'], #plazasCamas input[type='radio']")
   );
   if (camas.length >= personas) {
     for (let i = 0; i < personas; i++) {
       await camas[i].click();
-      await sleep(200);
+      await sleep(250);
     }
     console.log(`[INFO] Seleccionadas ${personas} camas.`);
     return;
   }
 
-  // Finalmente refugio completo
+  // 3) Refugio entero
   let ref = await driver.findElements(
     By.css("#plazasRefugio input[type='checkbox'], #plazasRefugio input[type='radio']")
   );
@@ -123,27 +124,27 @@ async function run() {
   try {
     console.log("[INFO] Abriendo web...");
     await driver.get(URL);
-    await sleep(2000);
+    await sleep(1500);
 
-    // PASO 1
+    // PASO 1: selección inicial
     await driver.wait(until.elementLocated(By.id("seleccion.idRefugio")), 20000);
 
-    console.log("[INFO] Seleccionando REFUGIO...");
+    console.log("[INFO] Seleccionando refugio / visitantes / noches...");
     await selectContains(driver, "seleccion.idRefugio", REFUGIO);
-
-    console.log("[INFO] Seleccionando VISITANTES...");
     await selectContains(driver, "seleccion.visitantes", PERSONAS);
-
-    console.log("[INFO] Seleccionando NOCHES...");
     await selectContains(driver, "seleccion.noches", NOCHES);
 
-    const dispBtn = await driver.findElement(By.css("button[data-button='comprobarDisponibilidad']"));
+    const dispBtn = await driver.findElement(
+      By.css("button[data-button='comprobarDisponibilidad']")
+    );
     await dispBtn.click();
     await sleep(1500);
 
-    // PASO 2
-    console.log("[INFO] Seleccionando día...");
-    const dias = await driver.findElements(By.css("td.leyenda_disponible, td.disponible"));
+    // PASO 2: día de entrada
+    console.log("[INFO] Seleccionando día disponible...");
+    const dias = await driver.findElements(
+      By.css("td.leyenda_disponible, td.disponible")
+    );
 
     if (dias.length === 0) {
       console.log("❌ No hay días disponibles.");
@@ -151,39 +152,35 @@ async function run() {
     }
 
     await dias[0].click();
-    await sleep(1000);
+    await sleep(800);
 
-    // PASO 3 - ECOTASA
+    // PASO 3: ecotasa
     console.log("[INFO] Seleccionando ecotasa...");
     await selectContains(driver, "ecotasa.visitantesMayores", PERSONAS);
-    await sleep(800);
 
-    // Detectar si hay botón ecotasaSiguiente
-    let ecoBtnExists = false;
+    // A veces hay botón "ecotasaSiguiente", a veces no
     try {
-      await driver.findElement(By.css("button[data-button='ecotasaSiguiente']"));
-      ecoBtnExists = true;
-      console.log("[INFO] Botón ecotasaSiguiente encontrado.");
-    } catch {
-      console.log("[INFO] No existe botón ecotasaSiguiente, continuando al paso de plazas.");
-    }
-
-    if (ecoBtnExists) {
-      const ecoBtn = await driver.findElement(By.css("button[data-button='ecotasaSiguiente']"));
+      const ecoBtn = await driver.findElement(
+        By.css("button[data-button='ecotasaSiguiente']")
+      );
+      console.log("[INFO] Pulsando botón de ecotasa...");
       await ecoBtn.click();
-      await sleep(1200);
+      await sleep(1000);
+    } catch {
+      console.log("[INFO] Sin botón de ecotasa, pasando a plazas.");
     }
 
-    // PASO 4 - PLAZAS
+    // PASO 4: plazas (habitaciones/camas/refugio)
     console.log("[INFO] Seleccionando plazas...");
     await selectBeds(driver, PERSONAS);
-    await sleep(800);
 
-    const selBtn = await driver.findElement(By.css("button[data-button='seleccionar']"));
+    const selBtn = await driver.findElement(
+      By.css("button[data-button='seleccionar']")
+    );
     await selBtn.click();
     await sleep(1500);
 
-    // PASO 5 - FORMULARIO
+    // PASO 5: formulario responsable
     async function write(id, val) {
       if (!val) return;
       try {
@@ -195,7 +192,7 @@ async function run() {
       }
     }
 
-    console.log("[INFO] Rellenando datos personales...");
+    console.log("[INFO] Rellenando formulario...");
 
     await write("responsable.nombre", USER.nombre);
     await write("responsable.primerApellido", USER.primerApellido);
@@ -217,6 +214,8 @@ async function run() {
     await write("contacto.telefono2", USER.telefono2);
     await write("contacto.email", USER.email);
 
+    // Checkboxes obligatorios
+    console.log("[INFO] Marcando checkboxes obligatorias...");
     for (let id of [
       "obligacionesVisitantes",
       "veracidad",
@@ -226,29 +225,73 @@ async function run() {
       try {
         const chk = await driver.findElement(By.id(id));
         if (!(await chk.isSelected())) await chk.click();
-      } catch {}
+      } catch {
+        console.log("[WARN] No se pudo marcar checkbox:", id);
+      }
     }
 
-    // PASO 6 - BOTÓN PAS SEGÜENT
-    console.log("[INFO] Buscando botón 'Pas següent'.");
+    // PASO 6: botón "Acceptació de les condicions"
+    console.log("[INFO] Buscando botón 'Acceptació de les condicions'...");
 
-    let nextBtn = await driver.findElement(By.css("button[data-button='seleccionar']"));
+    let aceptarCondBtn = null;
+    for (let i = 0; i < 20; i++) {
+      try {
+        aceptarCondBtn = await driver.findElement(
+          By.xpath("//button[.//span[contains(.,'Acceptació de les condicions')] or contains(.,'Acceptació de les condicions')]")
+        );
+        break;
+      } catch {
+        await sleep(300);
+      }
+    }
 
-    await driver.executeScript("arguments[0].scrollIntoView(true);", nextBtn);
-    await sleep(300);
+    if (aceptarCondBtn) {
+      console.log("[INFO] Pulsando 'Acceptació de les condicions'...");
+      await driver.executeScript("arguments[0].scrollIntoView(true);", aceptarCondBtn);
+      await sleep(300);
+      await aceptarCondBtn.click();
+      await sleep(800);
+    } else {
+      console.log("[WARN] No se encontró el botón 'Acceptació de les condicions'.");
+    }
 
-    await nextBtn.click();
+    // PASO 7: popup de condicions generals → botón "Acceptar"
+    console.log("[INFO] Buscando popup de condicions generals...");
 
-    console.log("=================================================");
+    let popupBtn = null;
+    for (let i = 0; i < 20; i++) {
+      try {
+        popupBtn = await driver.findElement(
+          By.xpath("//button[.//span[contains(.,'Acceptar')] or contains(.,'Acceptar')]")
+        );
+        break;
+      } catch {
+        await sleep(300);
+      }
+    }
+
+    if (popupBtn) {
+      console.log("[INFO] Popup encontrado → pulsando 'Acceptar'...");
+      await driver.executeScript("arguments[0].scrollIntoView(true);", popupBtn);
+      await sleep(300);
+      await popupBtn.click();
+      await sleep(800);
+    } else {
+      console.log("[INFO] No apareció el popup de 'Acceptar'.");
+    }
+
+    console.log("\n==============================================");
     console.log(" ✔ FORMULARIO COMPLETADO");
-    console.log(" ✔ TODO AUTOMATIZADO HASTA EL PAGO");
-    console.log(" 👉 AHORA COMPLETA EL PAGO MANUALMENTE");
-    console.log("=================================================");
+    console.log(" ✔ CONDICIONS ACCEPTADES");
+    console.log(" 👉 EL BOTÓN 'Pagament' YA DEBERÍA ESTAR ACTIVO");
+    console.log(" 👉 AHORA TÚ HACES EL PAGO MANUALMENTE");
+    console.log("==============================================\n");
 
+    // Dejamos el navegador abierto para que tú pagues
     await driver.wait(() => false, 999999999);
 
   } catch (err) {
-    console.log("[ERROR]", err);
+    console.log("[ERROR BOT]", err);
   }
 }
 
